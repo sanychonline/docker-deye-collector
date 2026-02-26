@@ -13,16 +13,23 @@ You may use a dashboards from this project to be imported to your grafana ui, or
 
 # Update .env file
 APP_ID= - from DeyeCloud Developer portal
+
 APP_SECRET= - from DeyeCloud Developer portal
+
 EMAIL= - DeyeCloud Developer portal account e-mail
+
 PASSWORD= - DeyeCloud Developer portal account password
+
 DEVICE_SN=  - Your Deye invertor SN
 
 BASE_URL= - DeyeCloud Developer portal base URL (in a top of https://developer.deyecloud.com/api)
+
 OUT_DIR=/metrics <- do not change
 
 GRAFANA_URL= - Cloud Prometheus endpoint
+
 GRAFANA_USER= - Cloud Prometheus username
+
 GRAFANA_API_KEY= - Cloud Prometheus api secret key
 
 # Start the project
