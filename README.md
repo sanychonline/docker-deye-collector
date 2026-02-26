@@ -1,5 +1,5 @@
 # docker-deye-collector
-This is docker-based deye collector and extractor to grafana cloud
+This is docker-based deye collector and extractor to grafana cloud (via DeyeCloud dev portal)
 
 # Pre-requirements
 1. Register your device in DeyeCloud application 
