@@ -1,0 +1,9 @@
+services:
+  deye:
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile
+    container_name: deye-alloy
+    env_file:
+      - .env
+    restart: always
