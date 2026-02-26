@@ -1,0 +1,23 @@
+prometheus.scrape "deye" {
+  targets = [
+    {
+      "__address__" = "localhost:9101",
+    },
+  ]
+
+  metrics_path    = "/deye.prom"
+  scrape_interval = "60s"
+
+  forward_to = [prometheus.remote_write.grafanacloud.receiver]
+}
+
+prometheus.remote_write "grafanacloud" {
+  endpoint {
+    url = env("GRAFANA_URL")
+
+    basic_auth {
+      username = env("GRAFANA_USER")
+      password = env("GRAFANA_API_KEY")
+    }
+  }
+}
