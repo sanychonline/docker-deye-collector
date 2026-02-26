@@ -34,4 +34,5 @@ GRAFANA_API_KEY= - Cloud Prometheus api secret key
 
 # Start the project
 run in terminal sudo docker-compose up -d
+
 after completion check the logs using the sudo docker-compose logs -f
