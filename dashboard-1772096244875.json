@@ -5,20 +5,16 @@
     "name": "Dp9Z3LX7z",
     "namespace": "stacks-1537831",
     "uid": "1ac432b9-3675-4f64-a16a-688651631689",
-    "resourceVersion": "1772044871286518",
-    "generation": 8,
+    "resourceVersion": "1772136481261976",
+    "generation": 20,
     "creationTimestamp": "2026-02-25T09:44:09Z",
-    "labels": {
-      "grafana.app/deprecatedInternalID": "4477820958486528"
-    },
+    "labels": {},
     "annotations": {
       "grafana.app/createdBy": "user:efeanktxbctmof",
       "grafana.app/folder": "cfeanic0ncydcd",
       "grafana.app/saved-from-ui": "Grafana Cloud",
       "grafana.app/updatedBy": "user:efeanktxbctmof",
-      "grafana.app/updatedTimestamp": "2026-02-25T18:41:11Z",
-      "grafana.app/folderTitle": "GrafanaCloud",
-      "grafana.app/folderUrl": "/dashboards/f/cfeanic0ncydcd/grafanacloud"
+      "grafana.app/updatedTimestamp": "2026-02-26T20:08:01Z"
     }
   },
   "spec": {
@@ -89,7 +85,8 @@
           "description": "",
           "id": 10,
           "links": [],
-          "title": "Рівень заряду батареї ліфта",
+          "title": "",
+          "transparent": true,
           "vizConfig": {
             "group": "gauge",
             "kind": "VizConfig",
@@ -99,15 +96,34 @@
                   "color": {
                     "mode": "thresholds"
                   },
+                  "max": 100,
+                  "min": 0,
                   "thresholds": {
-                    "mode": "absolute",
+                    "mode": "percentage",
                     "steps": [
                       {
                         "color": "green",
                         "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 5
+                      },
+                      {
+                        "color": "orange",
+                        "value": 10
+                      },
+                      {
+                        "color": "#EAB839",
+                        "value": 30
+                      },
+                      {
+                        "color": "green",
+                        "value": 40
                       }
                     ]
-                  }
+                  },
+                  "unit": "percent"
                 },
                 "overrides": []
               },
@@ -115,8 +131,8 @@
                 "barShape": "flat",
                 "barWidthFactor": 0.5,
                 "effects": {
-                  "barGlow": false,
-                  "centerGlow": false,
+                  "barGlow": true,
+                  "centerGlow": true,
                   "gradient": true
                 },
                 "endpointMarker": "point",
@@ -130,15 +146,15 @@
                 },
                 "segmentCount": 1,
                 "segmentSpacing": 0.3,
-                "shape": "gauge",
+                "shape": "circle",
                 "showThresholdLabels": false,
                 "showThresholdMarkers": true,
                 "sizing": "auto",
-                "sparkline": true,
+                "sparkline": false,
                 "textMode": "auto"
               }
             },
-            "version": "13.0.0-22246553003"
+            "version": "13.0.0-22262684784"
           }
         }
       }
@@ -187,7 +203,7 @@
       "timezone": "browser",
       "to": "now"
     },
-    "title": "Deye - Заряд батареї",
+    "title": "Рівень заряду батареї",
     "variables": []
   },
   "status": {}
