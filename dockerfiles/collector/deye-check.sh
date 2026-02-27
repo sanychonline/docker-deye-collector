@@ -6,8 +6,7 @@ APP_SECRET="${APP_SECRET:?APP_SECRET not set}"
 EMAIL="${EMAIL:?EMAIL not set}"
 PASSWORD="${PASSWORD:?PASSWORD not set}"
 DEVICE_SN="${DEVICE_SN:?DEVICE_SN not set}"
-
-BASE_URL="https://eu1-developer.deyecloud.com"
+BASE_URL="${BASE_URL:?BASE_URL not set}"
 
 echo "== LOGIN =="
 
