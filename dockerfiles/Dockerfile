@@ -30,7 +30,7 @@ COPY dockerfiles/collector/deye-stop.sh .
 COPY dockerfiles/collector/entrypoint.sh .
 COPY dockerfiles/collector/config.alloy /etc/alloy/config.alloy
 
-RUN chmod +x deye-connector.sh entrypoint.sh
+RUN chmod +x deye-*.sh entrypoint.sh
 RUN mkdir -p /metrics
 
 ENTRYPOINT ["/opt/deye/entrypoint.sh"]
