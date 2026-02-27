@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: dockerfiles/Dockerfile
-    container_name: deye-alloy
+    container_name: deye-collector
     env_file:
       - .env
     restart: always
