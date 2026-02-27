@@ -1030,7 +1030,7 @@
     "preload": true,
     "tags": [],
     "timeSettings": {
-      "autoRefresh": "60s",
+      "autoRefresh": "1m",
       "autoRefreshIntervals": [
         "5s",
         "10s",
