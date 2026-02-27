@@ -23,6 +23,10 @@ RUN wget https://github.com/grafana/alloy/releases/download/v${ALLOY_VERSION}/al
 WORKDIR /opt/deye
 
 COPY dockerfiles/collector/deye-connector.sh .
+COPY dockerfiles/collector/deye-check.sh.sh .
+COPY dockerfiles/collector/deye-restart.sh .
+COPY dockerfiles/collector/deye-start.sh .
+COPY dockerfiles/collector/deye-stop.sh .
 COPY dockerfiles/collector/entrypoint.sh .
 COPY dockerfiles/collector/config.alloy /etc/alloy/config.alloy
 
