@@ -6,7 +6,7 @@ echo "Starting Deye collector..."
 (
   while true; do
     /opt/deye/deye-connector.sh || echo "collector failed"
-    sleep 5
+    sleep 60
   done
 ) &
 
