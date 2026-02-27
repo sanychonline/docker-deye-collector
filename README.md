@@ -36,3 +36,16 @@ GRAFANA_API_KEY= - Cloud Prometheus api secret key
 run in terminal sudo docker-compose up -d
 
 after completion check the logs using the sudo docker-compose logs -f
+
+# Useful scripts
+All the scripts located in /opt/deye folder
+They do exactly the same actions they named deye-*: start, stop, check, restart
+Usage (from host) example:
+sudo docker exec -it deye-collector /opt/deye/deye-check.sh
+
+== LOGIN ==
+Token OK
+
+== READ REGISTER 0x0050 ==
+Raw value: 0001
+INVERTER: RUN
