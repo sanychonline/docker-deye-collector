@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  deye:
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile
+    container_name: deye-collector
+    env_file:
+      - .env
+    restart: always
+
+  caddy:
+    image: caddy:2
+    container_name: deye-caddy
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - deye
+    restart: always
+
+volumes:
+  caddy_data:
+  caddy_config:

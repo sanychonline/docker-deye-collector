@@ -1,0 +1,3 @@
+{$DOMAIN} {
+    reverse_proxy deye:9090
+}
