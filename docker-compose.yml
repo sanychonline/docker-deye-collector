@@ -6,4 +6,6 @@ services:
     container_name: deye-collector
     env_file:
       - .env
+    ports:
+      - "9090:9090"
     restart: always

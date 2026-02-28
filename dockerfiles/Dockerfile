@@ -10,15 +10,22 @@ RUN apt-get update && apt-get install -y \
     bash \
     wget \
     python3 \
+    python3-venv \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN wget https://github.com/grafana/alloy/releases/download/v${ALLOY_VERSION}/alloy-linux-amd64.zip \
-    -O /tmp/alloy.zip && \
-    unzip /tmp/alloy.zip -d /tmp && \
-    mv /tmp/alloy-linux-amd64 /usr/local/bin/alloy && \
-    chmod +x /usr/local/bin/alloy && \
-    rm -rf /tmp/*
+RUN python3 -m venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --upgrade pip && pip install flask
+
+ARG TARGETARCH
+RUN wget https://github.com/grafana/alloy/releases/download/v${ALLOY_VERSION}/alloy-linux-${TARGETARCH}.zip \
+    && unzip alloy-linux-${TARGETARCH}.zip \
+    && mv alloy-linux-${TARGETARCH} /usr/local/bin/alloy \
+    && chmod +x /usr/local/bin/alloy \
+    && rm alloy-linux-${TARGETARCH}.zip
 
 WORKDIR /opt/deye
 
@@ -29,6 +36,9 @@ COPY dockerfiles/collector/deye-start.sh .
 COPY dockerfiles/collector/deye-stop.sh .
 COPY dockerfiles/collector/entrypoint.sh .
 COPY dockerfiles/collector/config.alloy /etc/alloy/config.alloy
+
+COPY dockerfiles/collector/api.py .
+RUN chmod +x api.py
 
 RUN chmod +x deye-*.sh entrypoint.sh
 RUN mkdir -p /metrics
