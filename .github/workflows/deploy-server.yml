@@ -1,0 +1,183 @@
+name: Deploy Deye Collector
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEPLOY_HOST: ${{ vars.APP_BACKEND_API_SERVER }}
+      DEPLOY_PORT: ${{ vars.APP_BACKEND_API_SERVER_SSH_PORT }}
+      DEPLOY_PATH: ${{ vars.APP_DEPLOY_PATH }}
+      SSH_PRIVATE_KEY: ${{ secrets.APP_BACKEND_ACCESS_KEY }}
+      GITHUB_ACCESS_KEY: ${{ secrets.APP_GITHUB_ACCESS_KEY }}
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_SECRET: ${{ secrets.APP_SECRET }}
+      EMAIL: ${{ secrets.EMAIL }}
+      PASSWORD: ${{ secrets.PASSWORD }}
+      DEVICE_SN: ${{ vars.DEVICE_SN }}
+      BASE_URL: ${{ vars.BASE_URL }}
+      OUT_DIR: ${{ vars.OUT_DIR }}
+      GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+      GRAFANA_USER: ${{ vars.GRAFANA_USER }}
+      GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+      CADDY_BIND_IP: ${{ vars.CADDY_BIND_IP }}
+      CADDY_HTTP_PORT: ${{ vars.CADDY_HTTP_PORT }}
+      CADDY_HTTPS_PORT: ${{ vars.CADDY_HTTPS_PORT }}
+      PUBLIC_DOMAIN: ${{ vars.PUBLIC_DOMAIN }}
+      PANEL_PASSWORD: ${{ secrets.PANEL_PASSWORD }}
+      FLASK_SECRET: ${{ secrets.FLASK_SECRET }}
+      SSH_USER: developer
+    steps:
+      - name: Validate required configuration
+        run: |
+          test -n "${DEPLOY_HOST}" || (echo "Missing repo variable APP_BACKEND_API_SERVER" && exit 1)
+          test -n "${SSH_PRIVATE_KEY}" || (echo "Missing repo secret APP_BACKEND_ACCESS_KEY" && exit 1)
+          test -n "${GITHUB_ACCESS_KEY}" || (echo "Missing repo secret APP_GITHUB_ACCESS_KEY" && exit 1)
+          test -n "${APP_ID}" || (echo "Missing repo secret APP_ID" && exit 1)
+          test -n "${APP_SECRET}" || (echo "Missing repo secret APP_SECRET" && exit 1)
+          test -n "${EMAIL}" || (echo "Missing repo secret EMAIL" && exit 1)
+          test -n "${PASSWORD}" || (echo "Missing repo secret PASSWORD" && exit 1)
+          test -n "${GRAFANA_API_KEY}" || (echo "Missing repo secret GRAFANA_API_KEY" && exit 1)
+          test -n "${PANEL_PASSWORD}" || (echo "Missing repo secret PANEL_PASSWORD" && exit 1)
+          test -n "${FLASK_SECRET}" || (echo "Missing repo secret FLASK_SECRET" && exit 1)
+          echo "Using SSH port ${DEPLOY_PORT:-22}"
+
+      - name: Configure SSH
+        run: |
+          SSH_PORT="${DEPLOY_PORT:-22}"
+          install -d -m 700 ~/.ssh
+          python3 - <<'PY'
+          import base64
+          import os
+          import re
+          from pathlib import Path
+
+          secret = os.environ["SSH_PRIVATE_KEY"].strip().replace("\r", "")
+          decoded = None
+          if "BEGIN " in secret:
+              decoded = secret
+          else:
+              compact = re.sub(r"[^A-Za-z0-9+/=]", "", secret)
+              try:
+                  decoded = base64.b64decode(compact + "=" * (-len(compact) % 4)).decode("utf-8")
+              except Exception as exc:
+                  raise SystemExit(f"APP_BACKEND_ACCESS_KEY is neither a private key nor valid base64: {exc}")
+          decoded = decoded.replace("\r", "")
+          if "BEGIN " not in decoded:
+              raise SystemExit("APP_BACKEND_ACCESS_KEY must contain a private SSH key or base64 of it")
+          if not decoded.endswith("\n"):
+              decoded += "\n"
+          Path("/home/runner/.ssh/deploy_key").write_text(decoded)
+          PY
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keygen -y -f ~/.ssh/deploy_key >/dev/null
+          ssh-keyscan -p "${SSH_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Configure GitHub SSH key
+        run: |
+          install -d -m 700 ~/.ssh
+          python3 - <<'PY'
+          import base64
+          import os
+          import re
+          from pathlib import Path
+
+          secret = os.environ["GITHUB_ACCESS_KEY"].strip().replace("\r", "")
+          compact = re.sub(r"[^A-Za-z0-9+/=]", "", secret)
+          decoded = base64.b64decode(compact + "=" * (-len(compact) % 4)).decode("utf-8").replace("\r", "")
+          if "BEGIN " not in decoded:
+              raise SystemExit("APP_GITHUB_ACCESS_KEY must contain base64 of a private SSH key")
+          if not decoded.endswith("\n"):
+              decoded += "\n"
+          Path("/home/runner/.ssh/github_deploy_key").write_text(decoded)
+          PY
+          chmod 600 ~/.ssh/github_deploy_key
+          ssh-keygen -y -f ~/.ssh/github_deploy_key >/dev/null
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+
+      - name: Deploy on server
+        env:
+          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+          GITHUB_REPOSITORY_FULL: ${{ github.repository }}
+          GIT_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          TARGET_PATH="${DEPLOY_PATH:-/home/${SSH_USER}/${GITHUB_REPOSITORY_NAME}}"
+          SSH_PORT="${DEPLOY_PORT:-22}"
+          GITHUB_KEY_B64="$(base64 < ~/.ssh/github_deploy_key | tr -d '\n')"
+
+          ssh -p "${SSH_PORT}" -i ~/.ssh/deploy_key "${SSH_USER}@${DEPLOY_HOST}" \
+            "export GITHUB_REPOSITORY_FULL='${GITHUB_REPOSITORY_FULL}' GIT_BRANCH='${GIT_BRANCH}' TARGET_PATH='${TARGET_PATH}' GITHUB_KEY_B64='${GITHUB_KEY_B64}' APP_ID='${APP_ID}' APP_SECRET='${APP_SECRET}' EMAIL='${EMAIL}' PASSWORD='${PASSWORD}' DEVICE_SN='${DEVICE_SN}' BASE_URL='${BASE_URL}' OUT_DIR='${OUT_DIR}' GRAFANA_URL='${GRAFANA_URL}' GRAFANA_USER='${GRAFANA_USER}' GRAFANA_API_KEY='${GRAFANA_API_KEY}' CADDY_BIND_IP='${CADDY_BIND_IP}' CADDY_HTTP_PORT='${CADDY_HTTP_PORT}' CADDY_HTTPS_PORT='${CADDY_HTTPS_PORT}' PUBLIC_DOMAIN='${PUBLIC_DOMAIN}' PANEL_PASSWORD='${PANEL_PASSWORD}' FLASK_SECRET='${FLASK_SECRET}'; /bin/bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          REPO_URL="git@github.com:${GITHUB_REPOSITORY_FULL}.git"
+          install -d -m 700 ~/.ssh
+          printf '%s' "${GITHUB_KEY_B64}" | base64 -d > ~/.ssh/github_deploy_key
+          chmod 600 ~/.ssh/github_deploy_key
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/github_deploy_key -o IdentitiesOnly=yes"
+
+          mkdir -p "$(dirname "${TARGET_PATH}")"
+
+          if [ ! -d "${TARGET_PATH}/.git" ]; then
+            git clone --branch "${GIT_BRANCH}" "${REPO_URL}" "${TARGET_PATH}"
+          fi
+
+          cd "${TARGET_PATH}"
+          git remote set-url origin "${REPO_URL}"
+          git fetch origin "${GIT_BRANCH}"
+          git checkout "${GIT_BRANCH}"
+          git reset --hard "origin/${GIT_BRANCH}"
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          keys = [
+              "APP_ID",
+              "APP_SECRET",
+              "EMAIL",
+              "PASSWORD",
+              "DEVICE_SN",
+              "BASE_URL",
+              "OUT_DIR",
+              "GRAFANA_URL",
+              "GRAFANA_USER",
+              "GRAFANA_API_KEY",
+              "CADDY_BIND_IP",
+              "CADDY_HTTP_PORT",
+              "CADDY_HTTPS_PORT",
+              "PUBLIC_DOMAIN",
+              "PANEL_PASSWORD",
+              "FLASK_SECRET",
+          ]
+          lines = [f"{key}={os.environ.get(key, '')}" for key in keys]
+          Path(".env").write_text("\n".join(lines) + "\n")
+          PY
+
+          if sudo docker compose version >/dev/null 2>&1; then
+            COMPOSE_CMD='sudo docker compose'
+            COMPOSE_KIND='plugin'
+          elif sudo docker-compose version >/dev/null 2>&1; then
+            COMPOSE_CMD='sudo docker-compose'
+            COMPOSE_KIND='v1'
+          else
+            echo "Neither docker compose nor docker-compose is available on the server"
+            exit 1
+          fi
+
+          ${COMPOSE_CMD} pull || true
+          if [ "${COMPOSE_KIND}" = "v1" ]; then
+            sudo ${COMPOSE_CMD#sudo } down --remove-orphans || true
+          fi
+          sudo ${COMPOSE_CMD#sudo } up -d --build --remove-orphans
+          REMOTE

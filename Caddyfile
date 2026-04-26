@@ -1,0 +1,15 @@
+{
+    auto_https disable_redirects
+}
+
+# Internal-only listeners for upstream backend proxying.
+# HTTP:  container :80  (mapped to ${CADDY_HTTP_PORT})
+# HTTPS: container :443 (mapped to ${CADDY_HTTPS_PORT}, internal CA cert)
+:80 {
+    reverse_proxy deye:9090
+}
+
+:443 {
+    tls internal
+    reverse_proxy deye:9090
+}
