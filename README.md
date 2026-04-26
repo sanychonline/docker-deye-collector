@@ -92,55 +92,66 @@ docker-deye-collector/
 Example:
 
 ```
-DEYE_USERNAME=your_email
-DEYE_PASSWORD=your_password
-DEYE_REGION=eu1
-DEYE_SITE_ID=123456
+APP_ID=your_deye_app_id
+APP_SECRET=your_deye_app_secret
+EMAIL=your_deye_account_email
+PASSWORD=your_deye_account_password
+DEVICE_SN=your_device_serial_number
 
-SCRAPE_INTERVAL=60s
+BASE_URL=https://eu1-developer.deyecloud.com
+OUT_DIR=/metrics
 
-REMOTE_WRITE_URL=https://prometheus-xxx.grafana.net/api/prom/push
-REMOTE_WRITE_USERNAME=xxxxx
-REMOTE_WRITE_PASSWORD=xxxxx
+GRAFANA_URL=https://prometheus-xxx.grafana.net/api/prom/push
+GRAFANA_USER=xxxxx
+GRAFANA_API_KEY=glc_xxx
 
 CADDY_BIND_IP=127.0.0.1
 CADDY_HTTP_PORT=80
 CADDY_HTTPS_PORT=443
 PUBLIC_DOMAIN=metrics.example.com
+
+PANEL_PASSWORD=strong_password
+FLASK_SECRET=long_random_secret
 ```
 
 ## Variable Explanation
 
 ### Authentication
 
-- `DEYE_USERNAME`
-- `DEYE_PASSWORD`
-- `DEYE_REGION`
-- `DEYE_SITE_ID`
+- `APP_ID`
+- `APP_SECRET`
+- `EMAIL`
+- `PASSWORD`
+- `DEVICE_SN`
 
-Region must match your Deye account (e.g., `eu1`, `cn`, etc).
+### Deye API
 
-### Scraping
+- `BASE_URL` (e.g. `https://eu1-developer.deyecloud.com`)
 
-- `SCRAPE_INTERVAL` — metric pull frequency
+### Collector Output
 
-Lower interval = more API calls.
+- `OUT_DIR` (default `/metrics`)
 
 ### Remote Write (Optional)
 
-- `REMOTE_WRITE_URL`
-- `REMOTE_WRITE_USERNAME`
-- `REMOTE_WRITE_PASSWORD`
+- `GRAFANA_URL`
+- `GRAFANA_USER`
+- `GRAFANA_API_KEY`
 
 If not defined, metrics remain local only.
 
 ### Reverse Proxy / Backend Integration
 
 - `CADDY_BIND_IP` — where host ports are bound (recommended `127.0.0.1`)
-- `CADDY_HTTP_PORT` — internal HTTP upstream port for backend proxy
-- `CADDY_HTTPS_PORT` — internal HTTPS upstream port for backend proxy
+- `CADDY_HTTP_PORT` — host port mapped to container `:80`
+- `CADDY_HTTPS_PORT` — host port mapped to container `:443`
 - `PUBLIC_DOMAIN` — public hostname exposed by your outer backend/reverse proxy
 - Caddy starts together with collector in normal `docker compose up -d` flow
+
+### Web UI Access
+
+- `PANEL_PASSWORD`
+- `FLASK_SECRET`
 
 ---
 
@@ -189,7 +200,7 @@ docker compose ps
 ## Inspect logs
 
 ```
-docker compose logs collector
+docker compose logs deye
 ```
 
 ## Update containers
@@ -225,14 +236,14 @@ Example:
 
 ```
 :80 {
-    reverse_proxy collector:8080
+    reverse_proxy deye:9090
 }
 ```
 
 Features:
 
-- Internal HTTP/HTTPS listeners on non-standard host ports
-- HTTPS with internal CA (`tls internal`) for private upstream use
+- Internal listener `:80` -> `deye:9090`
+- Internal listener `:443` with `tls internal` -> `deye:9090`
 - Designed to be exposed by an outer backend proxy
 
 If running in a private network, external exposure may be unnecessary.
@@ -254,8 +265,8 @@ If running in a private network, external exposure may be unnecessary.
 If no metrics appear:
 
 1. Verify credentials
-2. Confirm region
-3. Confirm correct site ID
+2. Confirm `DEVICE_SN`
+3. Confirm `BASE_URL`
 4. Check logs
 5. Test outbound HTTPS connectivity
 6. Validate remote_write endpoint
@@ -264,8 +275,9 @@ Common causes:
 
 - Invalid login
 - Expired API session
+- Invalid `DEVICE_SN`
+- Invalid Grafana API key (`401 Unauthorized`)
 - Firewall blocking egress
-- Incorrect region selection
 
 ---
 
