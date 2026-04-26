@@ -140,12 +140,12 @@ FLASK_SECRET=long_random_secret
 
 If not defined, metrics remain local only.
 
-### Reverse Proxy / Backend Integration
+### Reverse Proxy
 
 - `CADDY_BIND_IP` — where host ports are bound (recommended `127.0.0.1`)
 - `CADDY_HTTP_PORT` — host port mapped to container `:80`
 - `CADDY_HTTPS_PORT` — host port mapped to container `:443`
-- `PUBLIC_DOMAIN` — public hostname exposed by your outer backend/reverse proxy
+- `PUBLIC_DOMAIN` — optional domain used by Caddy for host-based routing/TLS
 - Caddy starts together with collector in normal `docker compose up -d` flow
 
 ### Web UI Access
@@ -180,7 +180,7 @@ Stop:
 ```
 docker compose down
 ```
-Restart cleanly (no Caddy):
+Restart cleanly:
 
 ```
 docker compose down
@@ -238,13 +238,17 @@ Example:
 :80 {
     reverse_proxy deye:9090
 }
+
+{$PUBLIC_DOMAIN:localhost} {
+    reverse_proxy deye:9090
+}
 ```
 
 Features:
 
-- Internal listener `:80` -> `deye:9090`
-- Internal listener `:443` with `tls internal` -> `deye:9090`
-- Designed to be exposed by an outer backend proxy
+- HTTP listener for local/private access
+- Optional host-based entrypoint for domain deployments
+- Proxies traffic to `deye:9090`
 
 If running in a private network, external exposure may be unnecessary.
 
