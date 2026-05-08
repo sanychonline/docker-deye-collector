@@ -25,6 +25,44 @@ services:
     depends_on:
       - deye
     restart: always
+    networks:
+      - default
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: trader-bot-cadvisor
+    command:
+      - --housekeeping_interval=15s
+      - --docker_only=true
+      - --disable_metrics=udp,sched
+    restart: unless-stopped
+    ports:
+      - "${DEYE_CADVISOR_PORT:-127.0.0.1:18090}:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    networks:
+      - default
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    container_name: trader-bot-otel-collector
+    command:
+      - --config=/etc/otelcol-contrib/config.yaml
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    restart: unless-stopped
+    environment:
+      GRAFANA_OTLP_ENDPOINT: ${GRAFANA_OTLP_ENDPOINT:-https://otlp-gateway-prod-eu-west-2.grafana.net/otlp}
+    networks:
+      - default
 
 volumes:
   caddy_data:

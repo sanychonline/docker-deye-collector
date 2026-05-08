@@ -11,6 +11,19 @@ prometheus.scrape "deye" {
   forward_to = [prometheus.remote_write.grafanacloud.receiver]
 }
 
+prometheus.scrape "trader_containers" {
+  targets = [
+    {
+      "__address__" = "trader-bot-cadvisor:8080",
+    },
+  ]
+
+  metrics_path    = "/metrics"
+  scrape_interval = "30s"
+
+  forward_to = [prometheus.remote_write.grafanacloud.receiver]
+}
+
 prometheus.remote_write "grafanacloud" {
   endpoint {
     url = env("GRAFANA_URL")
