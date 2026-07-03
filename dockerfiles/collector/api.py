@@ -17,6 +17,13 @@ SCRIPTS = {
     "restart": "/opt/deye/deye-restart.sh",
 }
 
+SCRIPT_TIMEOUTS = {
+    "check": 45,
+    "start": 180,
+    "stop": 180,
+    "restart": 180,
+}
+
 def parse_metric(text, name):
     match = re.search(rf"{name}\s+(-?\d+\.?\d*)", text)
     if match:
@@ -46,6 +53,9 @@ def require_auth():
 
 
 def run_script(script_path):
+    action = next((name for name, path in SCRIPTS.items() if path == script_path), None)
+    timeout = SCRIPT_TIMEOUTS.get(action or "", 180)
+
     try:
         result = subprocess.run(
             ["/bin/bash", script_path],
@@ -53,11 +63,17 @@ def run_script(script_path):
             text=True,
             cwd="/opt/deye",
             env=os.environ.copy(),
-            timeout=180,
+            timeout=timeout,
         )
     except subprocess.TimeoutExpired as exc:
-        stdout = (exc.stdout or "").strip()
-        stderr = (exc.stderr or "").strip()
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        stdout = stdout.strip()
+        stderr = stderr.strip()
         output_parts = []
 
         if stdout:
@@ -65,7 +81,7 @@ def run_script(script_path):
         if stderr and stderr != stdout:
             output_parts.append(stderr)
 
-        output_parts.append("[script timeout after 180 seconds]")
+        output_parts.append(f"[script timeout after {timeout} seconds]")
         return "\n".join(output_parts)
 
     output_parts = []
