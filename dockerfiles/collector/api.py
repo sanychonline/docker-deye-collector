@@ -53,7 +53,7 @@ def run_script(script_path):
             text=True,
             cwd="/opt/deye",
             env=os.environ.copy(),
-            timeout=90,
+            timeout=180,
         )
     except subprocess.TimeoutExpired as exc:
         stdout = (exc.stdout or "").strip()
@@ -65,7 +65,7 @@ def run_script(script_path):
         if stderr and stderr != stdout:
             output_parts.append(stderr)
 
-        output_parts.append("[script timeout after 90 seconds]")
+        output_parts.append("[script timeout after 180 seconds]")
         return "\n".join(output_parts)
 
     output_parts = []

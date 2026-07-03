@@ -59,6 +59,12 @@ TOTAL_INVERTER_OUTPUT_POWER=${TOTAL_INVERTER_OUTPUT_POWER:-0}
 TOTAL_CONSUMPTION_POWER=${TOTAL_CONSUMPTION_POWER:-0}
 BATTERY_POWER=${BATTERY_POWER:-0}
 SOC=${SOC:-0}
+NOW_TS=$(date +%s)
+COLLECTION_AGE="unknown"
+
+if [[ -n "$COLLECTION_TIME" ]]; then
+  COLLECTION_AGE=$((NOW_TS - COLLECTION_TIME))
+fi
 
 if [[ -z "$DEVICE_STATE" ]]; then
   echo "Device state is empty"
@@ -68,6 +74,7 @@ fi
 
 echo "deviceState: $DEVICE_STATE"
 echo "collectionTime: $COLLECTION_TIME"
+echo "collectionAgeSeconds: $COLLECTION_AGE"
 echo "TotalInverterOutputPower: $TOTAL_INVERTER_OUTPUT_POWER W"
 echo "TotalConsumptionPower: $TOTAL_CONSUMPTION_POWER W"
 echo "BatteryPower: $BATTERY_POWER W"

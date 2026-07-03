@@ -14,7 +14,7 @@ echo "Starting metrics HTTP server..."
 python3 -m http.server 9101 --directory /metrics &
 
 echo "Starting API UI..."
-/opt/venv/bin/gunicorn -w 2 --timeout 120 -b 0.0.0.0:9090 api:app &
+/opt/venv/bin/gunicorn -w 2 --timeout 210 -b 0.0.0.0:9090 api:app &
 
 echo "Starting Alloy..."
 exec alloy run /etc/alloy/config.alloy

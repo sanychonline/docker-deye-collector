@@ -51,6 +51,8 @@ fetch_latest_status() {
     echo "$LATEST_RESPONSE"
     exit 1
   fi
+
+  COLLECTION_TIME=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].collectionTime // empty')
 }
 
 read_state() {
@@ -75,9 +77,15 @@ read_state() {
 
 wait_for_state() {
   EXPECTED_STATE="$1"
+  MIN_COLLECTION_TIME="$2"
 
-  for _ in 1 2 3 4 5 6; do
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24; do
     CURRENT_STATE=$(read_state)
+    if [[ -n "${COLLECTION_TIME:-}" && "$COLLECTION_TIME" =~ ^[0-9]+$ && "$COLLECTION_TIME" -lt "$MIN_COLLECTION_TIME" ]]; then
+      log "Waiting for fresh cloud snapshot (collectionTime=${COLLECTION_TIME}, need >= ${MIN_COLLECTION_TIME})"
+      sleep 5
+      continue
+    fi
     [[ "$CURRENT_STATE" == "$EXPECTED_STATE" ]] && return 0
     sleep 5
   done
@@ -127,14 +135,18 @@ fi
 
 send_start
 
-if wait_for_state "0001"; then
+COMMAND_TS=$(date +%s)
+
+if wait_for_state "0001" "$COMMAND_TS"; then
   NEW_STATE=$(read_state)
   log "State after START: $NEW_STATE"
+  log "State collectionTime: ${COLLECTION_TIME:-unknown}"
   log "Inverter successfully started"
   exit 0
 else
   NEW_STATE=$(read_state)
   log "State after START: $NEW_STATE"
+  log "State collectionTime: ${COLLECTION_TIME:-unknown}"
   log "START verification failed"
   exit 1
 fi
