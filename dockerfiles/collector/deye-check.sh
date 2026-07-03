@@ -85,8 +85,7 @@ if [[ -z "$DEVICE_STATE" ]]; then
 fi
 
 echo "deviceState: $DEVICE_STATE"
-echo "collectionTime: $COLLECTION_TIME"
-echo "collectionTimeHuman: $COLLECTION_TIME_HUMAN"
+echo "collectionTime: $COLLECTION_TIME_HUMAN"
 echo "collectionAgeSeconds: $COLLECTION_AGE"
 echo "TotalInverterOutputPower: $TOTAL_INVERTER_OUTPUT_POWER W"
 echo "TotalConsumptionPower: $TOTAL_CONSUMPTION_POWER W"
