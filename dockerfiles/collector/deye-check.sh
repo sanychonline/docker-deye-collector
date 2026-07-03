@@ -12,6 +12,17 @@ curl_json() {
   curl -fsS --connect-timeout 10 --max-time 30 "$@"
 }
 
+format_collection_time() {
+  local ts="$1"
+
+  if [[ -z "$ts" || ! "$ts" =~ ^[0-9]+$ ]]; then
+    echo "unknown"
+    return
+  fi
+
+  TZ="${TZ:-Europe/Kiev}" date -d "@$ts" '+%Y-%m-%d %H:%M:%S %Z'
+}
+
 echo "== LOGIN =="
 
 SHA256=$(printf "%s" "$PASSWORD" | sha256sum | awk '{print $1}')
@@ -61,6 +72,7 @@ BATTERY_POWER=${BATTERY_POWER:-0}
 SOC=${SOC:-0}
 NOW_TS=$(date +%s)
 COLLECTION_AGE="unknown"
+COLLECTION_TIME_HUMAN=$(format_collection_time "$COLLECTION_TIME")
 
 if [[ -n "$COLLECTION_TIME" ]]; then
   COLLECTION_AGE=$((NOW_TS - COLLECTION_TIME))
@@ -74,6 +86,7 @@ fi
 
 echo "deviceState: $DEVICE_STATE"
 echo "collectionTime: $COLLECTION_TIME"
+echo "collectionTimeHuman: $COLLECTION_TIME_HUMAN"
 echo "collectionAgeSeconds: $COLLECTION_AGE"
 echo "TotalInverterOutputPower: $TOTAL_INVERTER_OUTPUT_POWER W"
 echo "TotalConsumptionPower: $TOTAL_CONSUMPTION_POWER W"

@@ -16,6 +16,17 @@ curl_json() {
   curl -fsS --connect-timeout 10 --max-time 30 "$@"
 }
 
+format_collection_time() {
+  local ts="$1"
+
+  if [[ -z "$ts" || ! "$ts" =~ ^[0-9]+$ ]]; then
+    echo "unknown"
+    return
+  fi
+
+  TZ="${TZ:-Europe/Kiev}" date -d "@$ts" '+%Y-%m-%d %H:%M:%S %Z'
+}
+
 login() {
   log "Login..."
 
@@ -157,10 +168,12 @@ if wait_for_state "0000" "$COMMAND_TS"; then
   STOP_STATE=$(read_state)
   log "State after STOP: $STOP_STATE"
   log "State collectionTime after STOP: ${COLLECTION_TIME:-unknown}"
+  log "State collectionTimeHuman after STOP: $(format_collection_time "${COLLECTION_TIME:-}")"
 else
   STOP_STATE=$(read_state)
   log "State after STOP: $STOP_STATE"
   log "State collectionTime after STOP: ${COLLECTION_TIME:-unknown}"
+  log "State collectionTimeHuman after STOP: $(format_collection_time "${COLLECTION_TIME:-}")"
   log "STOP verification failed"
   exit 1
 fi
@@ -176,10 +189,12 @@ if wait_for_state "0001" "$COMMAND_TS"; then
   START_STATE=$(read_state)
   log "State after START: $START_STATE"
   log "State collectionTime after START: ${COLLECTION_TIME:-unknown}"
+  log "State collectionTimeHuman after START: $(format_collection_time "${COLLECTION_TIME:-}")"
 else
   START_STATE=$(read_state)
   log "State after START: $START_STATE"
   log "State collectionTime after START: ${COLLECTION_TIME:-unknown}"
+  log "State collectionTimeHuman after START: $(format_collection_time "${COLLECTION_TIME:-}")"
   log "START verification failed"
   exit 1
 fi

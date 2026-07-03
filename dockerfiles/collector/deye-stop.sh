@@ -16,6 +16,17 @@ curl_json() {
   curl -fsS --connect-timeout 10 --max-time 30 "$@"
 }
 
+format_collection_time() {
+  local ts="$1"
+
+  if [[ -z "$ts" || ! "$ts" =~ ^[0-9]+$ ]]; then
+    echo "unknown"
+    return
+  fi
+
+  TZ="${TZ:-Europe/Kiev}" date -d "@$ts" '+%Y-%m-%d %H:%M:%S %Z'
+}
+
 login() {
   log "Login..."
 
@@ -141,12 +152,14 @@ if wait_for_state "0000" "$COMMAND_TS"; then
   NEW_STATE=$(read_state)
   log "State after STOP: $NEW_STATE"
   log "State collectionTime: ${COLLECTION_TIME:-unknown}"
+  log "State collectionTimeHuman: $(format_collection_time "${COLLECTION_TIME:-}")"
   log "Inverter successfully stopped"
   exit 0
 else
   NEW_STATE=$(read_state)
   log "State after STOP: $NEW_STATE"
   log "State collectionTime: ${COLLECTION_TIME:-unknown}"
+  log "State collectionTimeHuman: $(format_collection_time "${COLLECTION_TIME:-}")"
   log "STOP verification failed"
   exit 1
 fi
