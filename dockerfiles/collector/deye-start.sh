@@ -57,27 +57,25 @@ read_state() {
   fetch_latest_status
 
   DEVICE_STATE=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].deviceState // empty')
+  TOTAL_INVERTER_OUTPUT_POWER=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].dataList[] | select(.key=="TotalInverterOutputPower") | .value // 0')
+  TOTAL_CONSUMPTION_POWER=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].dataList[] | select(.key=="TotalConsumptionPower") | .value // 0')
+
   if [[ -z "$DEVICE_STATE" ]]; then
     log "Device state is empty"
     echo "$LATEST_RESPONSE"
     exit 1
   fi
 
-  if [[ "$DEVICE_STATE" != "1" ]]; then
-    echo "OFFLINE"
-    return 0
-  fi
-
   if jq -e '(
       (.deviceDataList[0].dataList[] | select(.key=="TotalInverterOutputPower") | (.value|tonumber)) > 0
     ) or (
       (.deviceDataList[0].dataList[] | select(.key=="TotalConsumptionPower") | (.value|tonumber)) > 0
-    ) or (
-      (.deviceDataList[0].dataList[] | select(.key=="BatteryPower") | (.value|tonumber)) != 0
     )' >/dev/null 2>&1 <<<"$LATEST_RESPONSE"; then
     echo "0001"
-  else
+  elif [[ "$DEVICE_STATE" == "1" || "$DEVICE_STATE" == "2" ]]; then
     echo "0000"
+  else
+    echo "OFFLINE"
   fi
 }
 

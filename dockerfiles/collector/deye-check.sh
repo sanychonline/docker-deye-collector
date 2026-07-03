@@ -73,16 +73,19 @@ echo "TotalConsumptionPower: $TOTAL_CONSUMPTION_POWER W"
 echo "BatteryPower: $BATTERY_POWER W"
 echo "SOC: $SOC %"
 
-if [[ "$DEVICE_STATE" != "1" ]]; then
-  echo "INVERTER: OFFLINE_OR_UNAVAILABLE"
-elif jq -e '(
+IS_RUNNING=false
+if jq -e '(
     (.deviceDataList[0].dataList[] | select(.key=="TotalInverterOutputPower") | (.value|tonumber)) > 0
   ) or (
     (.deviceDataList[0].dataList[] | select(.key=="TotalConsumptionPower") | (.value|tonumber)) > 0
-  ) or (
-    (.deviceDataList[0].dataList[] | select(.key=="BatteryPower") | (.value|tonumber)) != 0
   )' >/dev/null 2>&1 <<<"$LATEST_RESPONSE"; then
+  IS_RUNNING=true
+fi
+
+if [[ "$IS_RUNNING" == "true" ]]; then
   echo "INVERTER: RUN"
-else
+elif [[ "$DEVICE_STATE" == "1" || "$DEVICE_STATE" == "2" ]]; then
   echo "INVERTER: STOP_OR_IDLE"
+else
+  echo "INVERTER: OFFLINE_OR_UNAVAILABLE"
 fi
