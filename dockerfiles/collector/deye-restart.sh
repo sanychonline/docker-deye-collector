@@ -31,7 +31,7 @@ fi
 
 log "Sending STOP..."
 STOP_RESPONSE=$(submit_custom_order "$DEYE_STOP_CONTENT")
-STOP_ORDER_ID=$(echo "$STOP_RESPONSE" | jq -r '.orderId // empty')
+STOP_ORDER_ID=$(extract_json_int_field "$STOP_RESPONSE" "orderId")
 STOP_SUCCESS=$(echo "$STOP_RESPONSE" | jq -r '.success // false')
 
 if [[ "$STOP_SUCCESS" != "true" || -z "$STOP_ORDER_ID" || "$STOP_ORDER_ID" == "null" ]]; then
@@ -63,7 +63,7 @@ sleep 10
 
 log "Sending START..."
 START_RESPONSE=$(submit_custom_order "$DEYE_START_CONTENT")
-START_ORDER_ID=$(echo "$START_RESPONSE" | jq -r '.orderId // empty')
+START_ORDER_ID=$(extract_json_int_field "$START_RESPONSE" "orderId")
 START_SUCCESS=$(echo "$START_RESPONSE" | jq -r '.success // false')
 
 if [[ "$START_SUCCESS" != "true" || -z "$START_ORDER_ID" || "$START_ORDER_ID" == "null" ]]; then

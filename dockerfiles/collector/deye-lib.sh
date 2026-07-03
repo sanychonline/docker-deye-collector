@@ -18,6 +18,13 @@ curl_json() {
   curl -fsS --connect-timeout 10 --max-time 30 "$@"
 }
 
+extract_json_int_field() {
+  local json="$1"
+  local field="$2"
+
+  printf '%s' "$json" | sed -n "s/.*\"${field}\":[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p" | head -n1
+}
+
 format_collection_time() {
   local ts="$1"
 
@@ -108,7 +115,7 @@ read_register_state_once() {
 
   create_response=$(submit_custom_order "$DEYE_READ_CONTENT")
   read_success=$(echo "$create_response" | jq -r '.success // false')
-  read_order_id=$(echo "$create_response" | jq -r '.orderId // empty')
+  read_order_id=$(extract_json_int_field "$create_response" "orderId")
 
   if [[ "$read_success" != "true" || -z "$read_order_id" || "$read_order_id" == "null" ]]; then
     printf '%s' "$create_response"

@@ -37,7 +37,7 @@ fi
 
 log "Sending STOP..."
 RESPONSE=$(submit_custom_order "$DEYE_STOP_CONTENT")
-ORDER_ID=$(echo "$RESPONSE" | jq -r '.orderId // empty')
+ORDER_ID=$(extract_json_int_field "$RESPONSE" "orderId")
 SUCCESS=$(echo "$RESPONSE" | jq -r '.success // false')
 
 if [[ "$SUCCESS" != "true" || -z "$ORDER_ID" || "$ORDER_ID" == "null" ]]; then
