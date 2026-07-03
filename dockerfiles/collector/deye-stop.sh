@@ -94,43 +94,22 @@ wait_for_state() {
 send_stop() {
   log "Sending STOP..."
 
-  ORDER_ID=$(curl_json -X POST \
+  RESPONSE=$(curl_json -X POST \
     "${BASE_URL}/v1.0/order/customControl" \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d "{\"deviceSn\":\"${DEVICE_SN}\",\"content\":\"011000500001020000AA00\",\"timeoutSeconds\":30}" \
-    | jq -r '.orderId')
+    -d "{\"deviceSn\":\"${DEVICE_SN}\",\"content\":\"011000500001020000AA00\",\"timeoutSeconds\":30}")
 
-  if [[ -z "$ORDER_ID" || "$ORDER_ID" == "null" ]]; then
+  ORDER_ID=$(echo "$RESPONSE" | jq -r '.orderId // empty')
+  SUCCESS=$(echo "$RESPONSE" | jq -r '.success // false')
+
+  if [[ "$SUCCESS" != "true" || -z "$ORDER_ID" || "$ORDER_ID" == "null" ]]; then
     log "Failed to create STOP order"
+    echo "$RESPONSE"
     exit 1
   fi
 
-  sleep 2
-
-  for _ in 1 2 3 4 5; do
-    RESULT=$(curl_json \
-      "${BASE_URL}/v1.0/order/${ORDER_ID}" \
-      -H "Authorization: Bearer ${ACCESS_TOKEN}")
-
-    STATUS=$(echo "$RESULT" | jq -r '.status // empty')
-    [[ -n "$STATUS" ]] && break
-    sleep 2
-  done
-
-  if [[ -z "${STATUS:-}" ]]; then
-    log "STOP status is empty"
-    echo "${RESULT:-}"
-    exit 1
-  fi
-
-  if [[ "$STATUS" != "666" ]]; then
-    log "STOP command failed"
-    echo "$RESULT"
-    exit 1
-  fi
-
-  log "STOP command accepted"
+  log "STOP order submitted: $ORDER_ID"
 }
 
 ### =========================
