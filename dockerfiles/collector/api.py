@@ -46,13 +46,27 @@ def require_auth():
 
 
 def run_script(script_path):
-    result = subprocess.run(
-        ["/bin/bash", script_path],
-        capture_output=True,
-        text=True,
-        cwd="/opt/deye",
-        env=os.environ.copy(),
-    )
+    try:
+        result = subprocess.run(
+            ["/bin/bash", script_path],
+            capture_output=True,
+            text=True,
+            cwd="/opt/deye",
+            env=os.environ.copy(),
+            timeout=90,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = (exc.stdout or "").strip()
+        stderr = (exc.stderr or "").strip()
+        output_parts = []
+
+        if stdout:
+            output_parts.append(stdout)
+        if stderr and stderr != stdout:
+            output_parts.append(stderr)
+
+        output_parts.append("[script timeout after 90 seconds]")
+        return "\n".join(output_parts)
 
     output_parts = []
     stdout = (result.stdout or "").strip()
