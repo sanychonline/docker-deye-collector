@@ -38,25 +38,59 @@ login() {
   log "Token OK"
 }
 
-read_state() {
-  ORDER_ID=$(curl_json -X POST \
-    "${BASE_URL}/v1.0/order/customControl" \
+fetch_latest_status() {
+  LATEST_RESPONSE=$(curl_json -X POST \
+    "${BASE_URL}/v1.0/device/latest" \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d "{\"deviceSn\":\"${DEVICE_SN}\",\"content\":\"010300500001841B\",\"timeoutSeconds\":30}" \
-    | jq -r '.orderId')
+    -d "{\"deviceList\":[\"${DEVICE_SN}\"]}")
 
-  if [[ -z "$ORDER_ID" || "$ORDER_ID" == "null" ]]; then
-    log "Failed to create read-order"
+  SUCCESS=$(echo "$LATEST_RESPONSE" | jq -r '.success // false')
+  if [[ "$SUCCESS" != "true" ]]; then
+    log "Latest device status request failed"
+    echo "$LATEST_RESPONSE"
+    exit 1
+  fi
+}
+
+read_state() {
+  fetch_latest_status
+
+  DEVICE_STATE=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].deviceState // empty')
+  if [[ -z "$DEVICE_STATE" ]]; then
+    log "Device state is empty"
+    echo "$LATEST_RESPONSE"
     exit 1
   fi
 
-  sleep 2
+  if [[ "$DEVICE_STATE" != "1" ]]; then
+    echo "OFFLINE"
+    return 0
+  fi
 
-  curl_json \
-    "${BASE_URL}/v1.0/order/${ORDER_ID}" \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    | jq -r '.analysisResult // empty' | cut -c7-10
+  if jq -e '(
+      (.deviceDataList[0].dataList[] | select(.key=="TotalInverterOutputPower") | (.value|tonumber)) > 0
+    ) or (
+      (.deviceDataList[0].dataList[] | select(.key=="TotalConsumptionPower") | (.value|tonumber)) > 0
+    ) or (
+      (.deviceDataList[0].dataList[] | select(.key=="BatteryPower") | (.value|tonumber)) != 0
+    )' >/dev/null 2>&1 <<<"$LATEST_RESPONSE"; then
+    echo "0001"
+  else
+    echo "0000"
+  fi
+}
+
+wait_for_state() {
+  EXPECTED_STATE="$1"
+
+  for _ in 1 2 3 4 5 6; do
+    CURRENT_STATE=$(read_state)
+    [[ "$CURRENT_STATE" == "$EXPECTED_STATE" ]] && return 0
+    sleep 5
+  done
+
+  return 1
 }
 
 send_start() {
@@ -88,11 +122,13 @@ send_start() {
 
   if [[ -z "${STATUS:-}" ]]; then
     log "START status is empty"
+    echo "${RESULT:-}"
     exit 1
   fi
 
   if [[ "$STATUS" != "666" ]]; then
     log "START command failed"
+    echo "$RESULT"
     exit 1
   fi
 
@@ -120,13 +156,14 @@ fi
 
 send_start
 
-NEW_STATE=$(read_state)
-log "State after START: $NEW_STATE"
-
-if [[ "$NEW_STATE" == "0001" ]]; then
+if wait_for_state "0001"; then
+  NEW_STATE=$(read_state)
+  log "State after START: $NEW_STATE"
   log "Inverter successfully started"
   exit 0
 else
+  NEW_STATE=$(read_state)
+  log "State after START: $NEW_STATE"
   log "START verification failed"
   exit 1
 fi
