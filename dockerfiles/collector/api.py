@@ -17,13 +17,6 @@ SCRIPTS = {
     "restart": "/opt/deye/deye-restart.sh",
 }
 
-SCRIPT_TIMEOUTS = {
-    "check": 45,
-    "start": 180,
-    "stop": 180,
-    "restart": 180,
-}
-
 def parse_metric(text, name):
     match = re.search(rf"{name}\s+(-?\d+\.?\d*)", text)
     if match:
@@ -50,53 +43,6 @@ def get_metrics():
 
 def require_auth():
     return session.get("auth") is True
-
-
-def run_script(script_path):
-    action = next((name for name, path in SCRIPTS.items() if path == script_path), None)
-    timeout = SCRIPT_TIMEOUTS.get(action or "", 180)
-
-    try:
-        result = subprocess.run(
-            ["/bin/bash", script_path],
-            capture_output=True,
-            text=True,
-            cwd="/opt/deye",
-            env=os.environ.copy(),
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        stdout = exc.stdout or ""
-        stderr = exc.stderr or ""
-        if isinstance(stdout, bytes):
-            stdout = stdout.decode(errors="replace")
-        if isinstance(stderr, bytes):
-            stderr = stderr.decode(errors="replace")
-        stdout = stdout.strip()
-        stderr = stderr.strip()
-        output_parts = []
-
-        if stdout:
-            output_parts.append(stdout)
-        if stderr and stderr != stdout:
-            output_parts.append(stderr)
-
-        output_parts.append(f"[script timeout after {timeout} seconds]")
-        return "\n".join(output_parts)
-
-    output_parts = []
-    stdout = (result.stdout or "").strip()
-    stderr = (result.stderr or "").strip()
-
-    if stdout:
-        output_parts.append(stdout)
-    if stderr and stderr != stdout:
-        output_parts.append(stderr)
-
-    if result.returncode != 0:
-        output_parts.append(f"[exit code: {result.returncode}]")
-
-    return "\n".join(output_parts) if output_parts else f"[exit code: {result.returncode}]"
 
 LOGIN_HTML = """
 <!doctype html>
@@ -321,7 +267,12 @@ def index():
     if request.method == "POST":
         action = request.form.get("action")
         if action in SCRIPTS:
-            output = run_script(SCRIPTS[action])
+            result = subprocess.run(
+                [SCRIPTS[action]],
+                capture_output=True,
+                text=True
+            )
+            output = result.stdout or result.stderr
     return render_template_string(HTML, result=output)
 
 @app.route("/metrics")

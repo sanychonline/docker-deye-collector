@@ -1,27 +1,101 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/deye-lib.sh"
+APP_ID="${APP_ID:?APP_ID not set}"
+APP_SECRET="${APP_SECRET:?APP_SECRET not set}"
+EMAIL="${EMAIL:?EMAIL not set}"
+PASSWORD="${PASSWORD:?PASSWORD not set}"
+DEVICE_SN="${DEVICE_SN:?DEVICE_SN not set}"
+BASE_URL="${BASE_URL:?BASE_URL not set}"
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-log "Login..."
-if ! login; then
-  log "Login failed"
-  exit 1
-fi
-log "Token OK"
+extract_order_id() {
+  printf '%s' "$1" | sed -n 's/.*"orderId":[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n1
+}
 
-if ! read_register_state 3 1 >/dev/null; then
-  log "READ before START failed"
-  echo "${READ_ORDER_RESPONSE:-}"
-  exit 1
-fi
+login() {
+  log "Login..."
 
-CURRENT_STATE="$READ_REGISTER_STATE"
+  SHA256=$(printf "%s" "$PASSWORD" | sha256sum | awk '{print $1}')
+
+  ACCESS_TOKEN=$(curl -s -X POST \
+    "${BASE_URL}/v1.0/account/token?appId=${APP_ID}" \
+    -H "Content-Type: application/json" \
+    -d "{
+          \"appSecret\": \"${APP_SECRET}\",
+          \"email\": \"${EMAIL}\",
+          \"password\": \"${SHA256}\"
+        }" | jq -r '.accessToken')
+
+  if [[ -z "$ACCESS_TOKEN" || "$ACCESS_TOKEN" == "null" ]]; then
+    log "Login failed"
+    exit 1
+  fi
+
+  log "Token OK"
+}
+
+read_state() {
+  READ_RESPONSE=$(curl -s -X POST \
+    "${BASE_URL}/v1.0/order/customControl" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"deviceSn\":\"${DEVICE_SN}\",\"content\":\"010300500001841B\",\"timeoutSeconds\":30}")
+
+  ORDER_ID=$(extract_order_id "$READ_RESPONSE")
+  [[ -n "$ORDER_ID" ]] || { echo "$READ_RESPONSE"; exit 1; }
+
+  sleep 2
+
+  curl -s \
+    "${BASE_URL}/v1.0/order/${ORDER_ID}" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    | jq -r '.analysisResult' | cut -c7-10
+}
+
+send_start() {
+  log "Sending START..."
+
+  START_RESPONSE=$(curl -s -X POST \
+    "${BASE_URL}/v1.0/order/customControl" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"deviceSn\":\"${DEVICE_SN}\",\"content\":\"0110005000010200016BC0\",\"timeoutSeconds\":30}")
+
+  ORDER_ID=$(extract_order_id "$START_RESPONSE")
+
+  if [[ -z "$ORDER_ID" ]]; then
+    log "START command failed"
+    echo "$START_RESPONSE"
+    exit 1
+  fi
+
+  sleep 3
+
+  RESULT=$(curl -s \
+    "${BASE_URL}/v1.0/order/${ORDER_ID}" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}")
+
+  STATUS=$(echo "$RESULT" | jq -r '.status')
+
+  if [[ "$STATUS" != "666" ]]; then
+    log "START command failed"
+    exit 1
+  fi
+
+  log "START command accepted"
+}
+
+### =========================
+### MAIN
+### =========================
+
+login
+
+CURRENT_STATE=$(read_state)
 log "Current state: $CURRENT_STATE"
 
 if [[ "$CURRENT_STATE" == "0001" ]]; then
@@ -31,37 +105,18 @@ fi
 
 if [[ "$CURRENT_STATE" != "0000" ]]; then
   log "Unknown state, aborting"
-  echo "${READ_ORDER_RESPONSE:-}"
   exit 1
 fi
 
-log "Sending START..."
-RESPONSE=$(submit_custom_order "$DEYE_START_CONTENT")
-ORDER_ID=$(extract_json_int_field "$RESPONSE" "orderId")
-SUCCESS=$(echo "$RESPONSE" | jq -r '.success // false')
+send_start
 
-if [[ "$SUCCESS" != "true" || -z "$ORDER_ID" || "$ORDER_ID" == "null" ]]; then
-  log "Failed to create START order"
-  echo "$RESPONSE"
-  exit 1
-fi
+NEW_STATE=$(read_state)
+log "State after START: $NEW_STATE"
 
-log "START order submitted: $ORDER_ID"
-
-if verify_state_transition "0001" 10 4; then
-  log "State after START: $READ_REGISTER_STATE"
-  if fetch_latest_status; then
-    log "State collectionTime: ${COLLECTION_TIME:-unknown}"
-    log "State collectionTimeHuman: $(format_collection_time "${COLLECTION_TIME:-}")"
-  fi
+if [[ "$NEW_STATE" == "0001" ]]; then
   log "Inverter successfully started"
   exit 0
+else
+  log "START verification failed"
+  exit 1
 fi
-
-log "State after START: ${READ_REGISTER_STATE:-unknown}"
-if fetch_latest_status; then
-  log "State collectionTime: ${COLLECTION_TIME:-unknown}"
-  log "State collectionTimeHuman: $(format_collection_time "${COLLECTION_TIME:-}")"
-fi
-log "START verification failed"
-exit 1

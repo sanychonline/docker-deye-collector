@@ -1,14 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/deye-lib.sh"
-READ_ORDER_MAX_POLLS=4
-READ_ORDER_POLL_SLEEP=2
+APP_ID="${APP_ID:?APP_ID not set}"
+APP_SECRET="${APP_SECRET:?APP_SECRET not set}"
+EMAIL="${EMAIL:?EMAIL not set}"
+PASSWORD="${PASSWORD:?PASSWORD not set}"
+DEVICE_SN="${DEVICE_SN:?DEVICE_SN not set}"
+BASE_URL="${BASE_URL:?BASE_URL not set}"
+
+extract_order_id() {
+  printf '%s' "$1" | sed -n 's/.*"orderId":[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n1
+}
 
 echo "== LOGIN =="
 
-if ! login; then
+SHA256=$(printf "%s" "$PASSWORD" | sha256sum | awk '{print $1}')
+
+ACCESS_TOKEN=$(curl -s -X POST \
+  "${BASE_URL}/v1.0/account/token?appId=${APP_ID}" \
+  -H "Content-Type: application/json" \
+  -d "{
+        \"appSecret\": \"${APP_SECRET}\",
+        \"email\": \"${EMAIL}\",
+        \"password\": \"${SHA256}\"
+      }" | jq -r '.accessToken')
+
+if [[ -z "$ACCESS_TOKEN" || "$ACCESS_TOKEN" == "null" ]]; then
   echo "Login failed"
   exit 1
 fi
@@ -16,55 +33,35 @@ fi
 echo "Token OK"
 echo
 
-echo "== LIVE REGISTER READ 0x0050 =="
+echo "== READ REGISTER 0x0050 =="
 
-if ! read_register_state 2 1 >/dev/null; then
-  echo "READ register polling failed"
-  echo "${READ_ORDER_RESPONSE:-}"
+READ_RESPONSE=$(curl -s -X POST \
+  "${BASE_URL}/v1.0/order/customControl" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "{\"deviceSn\":\"${DEVICE_SN}\",\"content\":\"010300500001841B\",\"timeoutSeconds\":30}")
+
+ORDER_ID=$(extract_order_id "$READ_RESPONSE")
+
+if [[ -z "$ORDER_ID" ]]; then
+  echo "Read order creation failed"
+  echo "$READ_RESPONSE"
   exit 1
 fi
 
-echo "readOrderId: ${READ_ORDER_ID}"
-echo "analysisResult: ${READ_ANALYSIS_RESULT}"
-echo "registerState: ${READ_REGISTER_STATE}"
-echo
+sleep 2
 
-echo "== DEVICE LATEST STATUS =="
+STATE=$(curl -s \
+  "${BASE_URL}/v1.0/order/${ORDER_ID}" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  | jq -r '.analysisResult' | cut -c7-10)
 
-if ! fetch_latest_status; then
-  echo "Latest device status request failed"
-  echo "${LATEST_RESPONSE:-}"
-  exit 1
-fi
+echo "Raw value: $STATE"
 
-TOTAL_INVERTER_OUTPUT_POWER=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].dataList[] | select(.key=="TotalInverterOutputPower") | .value // empty')
-TOTAL_CONSUMPTION_POWER=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].dataList[] | select(.key=="TotalConsumptionPower") | .value // empty')
-BATTERY_POWER=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].dataList[] | select(.key=="BatteryPower") | .value // empty')
-SOC=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].dataList[] | select(.key=="SOC") | .value // empty')
-
-TOTAL_INVERTER_OUTPUT_POWER=${TOTAL_INVERTER_OUTPUT_POWER:-0}
-TOTAL_CONSUMPTION_POWER=${TOTAL_CONSUMPTION_POWER:-0}
-BATTERY_POWER=${BATTERY_POWER:-0}
-SOC=${SOC:-0}
-
-NOW_TS=$(date +%s)
-COLLECTION_AGE="unknown"
-if [[ -n "$COLLECTION_TIME" && "$COLLECTION_TIME" =~ ^[0-9]+$ ]]; then
-  COLLECTION_AGE=$((NOW_TS - COLLECTION_TIME))
-fi
-
-echo "deviceState: ${DEVICE_STATE}"
-echo "collectionTime: $(format_collection_time "${COLLECTION_TIME:-}")"
-echo "collectionAgeSeconds: ${COLLECTION_AGE}"
-echo "TotalInverterOutputPower: ${TOTAL_INVERTER_OUTPUT_POWER} W"
-echo "TotalConsumptionPower: ${TOTAL_CONSUMPTION_POWER} W"
-echo "BatteryPower: ${BATTERY_POWER} W"
-echo "SOC: ${SOC} %"
-
-if [[ "$READ_REGISTER_STATE" == "0001" ]]; then
+if [[ "$STATE" == "0001" ]]; then
   echo "INVERTER: RUN"
-elif [[ "$READ_REGISTER_STATE" == "0000" ]]; then
-  echo "INVERTER: STOP_OR_IDLE"
+elif [[ "$STATE" == "0000" ]]; then
+  echo "INVERTER: STOP"
 else
-  echo "INVERTER: UNKNOWN_REGISTER_STATE"
+  echo "INVERTER: UNKNOWN ($STATE)"
 fi

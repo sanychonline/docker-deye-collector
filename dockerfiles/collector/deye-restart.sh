@@ -1,27 +1,126 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/deye-lib.sh"
+APP_ID="${APP_ID:?APP_ID not set}"
+APP_SECRET="${APP_SECRET:?APP_SECRET not set}"
+EMAIL="${EMAIL:?EMAIL not set}"
+PASSWORD="${PASSWORD:?PASSWORD not set}"
+DEVICE_SN="${DEVICE_SN:?DEVICE_SN not set}"
+BASE_URL="${BASE_URL:?BASE_URL not set}"
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-log "Login..."
-if ! login; then
-  log "Login failed"
-  exit 1
-fi
-log "Token OK"
+extract_order_id() {
+  printf '%s' "$1" | sed -n 's/.*"orderId":[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n1
+}
 
-if ! read_register_state 3 1 >/dev/null; then
-  log "READ before RESTART failed"
-  echo "${READ_ORDER_RESPONSE:-}"
-  exit 1
-fi
+login() {
+  log "Login..."
 
-CURRENT_STATE="$READ_REGISTER_STATE"
+  SHA256=$(printf "%s" "$PASSWORD" | sha256sum | awk '{print $1}')
+
+  ACCESS_TOKEN=$(curl -s -X POST \
+    "${BASE_URL}/v1.0/account/token?appId=${APP_ID}" \
+    -H "Content-Type: application/json" \
+    -d "{
+          \"appSecret\": \"${APP_SECRET}\",
+          \"email\": \"${EMAIL}\",
+          \"password\": \"${SHA256}\"
+        }" | jq -r '.accessToken')
+
+  if [[ -z "$ACCESS_TOKEN" || "$ACCESS_TOKEN" == "null" ]]; then
+    log "Login failed"
+    exit 1
+  fi
+
+  log "Token OK"
+}
+
+read_state() {
+  READ_RESPONSE=$(curl -s -X POST \
+    "${BASE_URL}/v1.0/order/customControl" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"deviceSn\":\"${DEVICE_SN}\",\"content\":\"010300500001841B\",\"timeoutSeconds\":30}")
+
+  ORDER_ID=$(extract_order_id "$READ_RESPONSE")
+  [[ -n "$ORDER_ID" ]] || { echo "$READ_RESPONSE"; exit 1; }
+
+  sleep 2
+
+  curl -s \
+    "${BASE_URL}/v1.0/order/${ORDER_ID}" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    | jq -r '.analysisResult' | cut -c7-10
+}
+
+send_stop() {
+  log "Sending STOP..."
+
+  STOP_RESPONSE=$(curl -s -X POST \
+    "${BASE_URL}/v1.0/order/customControl" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"deviceSn\":\"${DEVICE_SN}\",\"content\":\"011000500001020000AA00\",\"timeoutSeconds\":30}")
+
+  ORDER_ID=$(extract_order_id "$STOP_RESPONSE")
+
+  if [[ -z "$ORDER_ID" ]]; then
+    log "STOP failed"
+    echo "$STOP_RESPONSE"
+    exit 1
+  fi
+
+  sleep 3
+
+  STATUS=$(curl -s \
+    "${BASE_URL}/v1.0/order/${ORDER_ID}" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    | jq -r '.status')
+
+  [[ "$STATUS" == "666" ]] || { log "STOP failed"; exit 1; }
+
+  log "STOP accepted"
+}
+
+send_start() {
+  log "Sending START..."
+
+  START_RESPONSE=$(curl -s -X POST \
+    "${BASE_URL}/v1.0/order/customControl" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"deviceSn\":\"${DEVICE_SN}\",\"content\":\"0110005000010200016BC0\",\"timeoutSeconds\":30}")
+
+  ORDER_ID=$(extract_order_id "$START_RESPONSE")
+
+  if [[ -z "$ORDER_ID" ]]; then
+    log "START failed"
+    echo "$START_RESPONSE"
+    exit 1
+  fi
+
+  sleep 3
+
+  STATUS=$(curl -s \
+    "${BASE_URL}/v1.0/order/${ORDER_ID}" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    | jq -r '.status')
+
+  [[ "$STATUS" == "666" ]] || { log "START failed"; exit 1; }
+
+  log "START accepted"
+}
+
+### =========================
+### MAIN
+### =========================
+
+login
+
+CURRENT_STATE=$(read_state)
 log "Current state: $CURRENT_STATE"
 
 if [[ "$CURRENT_STATE" != "0001" ]]; then
@@ -29,31 +128,12 @@ if [[ "$CURRENT_STATE" != "0001" ]]; then
   exit 1
 fi
 
-log "Sending STOP..."
-STOP_RESPONSE=$(submit_custom_order "$DEYE_STOP_CONTENT")
-STOP_ORDER_ID=$(extract_json_int_field "$STOP_RESPONSE" "orderId")
-STOP_SUCCESS=$(echo "$STOP_RESPONSE" | jq -r '.success // false')
+send_stop
 
-if [[ "$STOP_SUCCESS" != "true" || -z "$STOP_ORDER_ID" || "$STOP_ORDER_ID" == "null" ]]; then
-  log "Failed to create STOP order"
-  echo "$STOP_RESPONSE"
-  exit 1
-fi
+STOP_STATE=$(read_state)
+log "State after STOP: $STOP_STATE"
 
-log "STOP order submitted: $STOP_ORDER_ID"
-
-if verify_state_transition "0000" 10 4; then
-  log "State after STOP: $READ_REGISTER_STATE"
-  if fetch_latest_status; then
-    log "State collectionTime after STOP: ${COLLECTION_TIME:-unknown}"
-    log "State collectionTimeHuman after STOP: $(format_collection_time "${COLLECTION_TIME:-}")"
-  fi
-else
-  log "State after STOP: ${READ_REGISTER_STATE:-unknown}"
-  if fetch_latest_status; then
-    log "State collectionTime after STOP: ${COLLECTION_TIME:-unknown}"
-    log "State collectionTimeHuman after STOP: $(format_collection_time "${COLLECTION_TIME:-}")"
-  fi
+if [[ "$STOP_STATE" != "0000" ]]; then
   log "STOP verification failed"
   exit 1
 fi
@@ -61,33 +141,15 @@ fi
 log "Waiting 10 seconds..."
 sleep 10
 
-log "Sending START..."
-START_RESPONSE=$(submit_custom_order "$DEYE_START_CONTENT")
-START_ORDER_ID=$(extract_json_int_field "$START_RESPONSE" "orderId")
-START_SUCCESS=$(echo "$START_RESPONSE" | jq -r '.success // false')
+send_start
 
-if [[ "$START_SUCCESS" != "true" || -z "$START_ORDER_ID" || "$START_ORDER_ID" == "null" ]]; then
-  log "Failed to create START order"
-  echo "$START_RESPONSE"
+START_STATE=$(read_state)
+log "State after START: $START_STATE"
+
+if [[ "$START_STATE" != "0001" ]]; then
+  log "START verification failed"
   exit 1
 fi
 
-log "START order submitted: $START_ORDER_ID"
-
-if verify_state_transition "0001" 10 4; then
-  log "State after START: $READ_REGISTER_STATE"
-  if fetch_latest_status; then
-    log "State collectionTime after START: ${COLLECTION_TIME:-unknown}"
-    log "State collectionTimeHuman after START: $(format_collection_time "${COLLECTION_TIME:-}")"
-  fi
-  log "Restart successful"
-  exit 0
-fi
-
-log "State after START: ${READ_REGISTER_STATE:-unknown}"
-if fetch_latest_status; then
-  log "State collectionTime after START: ${COLLECTION_TIME:-unknown}"
-  log "State collectionTimeHuman after START: $(format_collection_time "${COLLECTION_TIME:-}")"
-fi
-log "START verification failed"
-exit 1
+log "Restart successful"
+exit 0
