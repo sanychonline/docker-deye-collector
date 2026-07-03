@@ -8,11 +8,15 @@ PASSWORD="${PASSWORD:?PASSWORD not set}"
 DEVICE_SN="${DEVICE_SN:?DEVICE_SN not set}"
 BASE_URL="${BASE_URL:?BASE_URL not set}"
 
+curl_json() {
+  curl -fsS --connect-timeout 10 --max-time 30 "$@"
+}
+
 echo "== LOGIN =="
 
 SHA256=$(printf "%s" "$PASSWORD" | sha256sum | awk '{print $1}')
 
-ACCESS_TOKEN=$(curl -s -X POST \
+ACCESS_TOKEN=$(curl_json -X POST \
   "${BASE_URL}/v1.0/account/token?appId=${APP_ID}" \
   -H "Content-Type: application/json" \
   -d "{
@@ -29,28 +33,56 @@ fi
 echo "Token OK"
 echo
 
-echo "== READ REGISTER 0x0050 =="
+echo "== DEVICE LATEST STATUS =="
 
-ORDER_ID=$(curl -s -X POST \
-  "${BASE_URL}/v1.0/order/customControl" \
+LATEST_RESPONSE=$(curl_json -X POST \
+  "${BASE_URL}/v1.0/device/latest" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d "{\"deviceSn\":\"${DEVICE_SN}\",\"content\":\"010300500001841B\",\"timeoutSeconds\":30}" \
-  | jq -r '.orderId')
+  -d "{\"deviceList\":[\"${DEVICE_SN}\"]}")
 
-sleep 2
+SUCCESS=$(echo "$LATEST_RESPONSE" | jq -r '.success // false')
+if [[ "$SUCCESS" != "true" ]]; then
+  echo "Latest device status request failed"
+  echo "$LATEST_RESPONSE"
+  exit 1
+fi
 
-STATE=$(curl -s \
-  "${BASE_URL}/v1.0/order/${ORDER_ID}" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  | jq -r '.analysisResult' | cut -c7-10)
+DEVICE_STATE=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].deviceState // empty')
+COLLECTION_TIME=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].collectionTime // empty')
+TOTAL_INVERTER_OUTPUT_POWER=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].dataList[] | select(.key=="TotalInverterOutputPower") | .value // empty')
+TOTAL_CONSUMPTION_POWER=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].dataList[] | select(.key=="TotalConsumptionPower") | .value // empty')
+BATTERY_POWER=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].dataList[] | select(.key=="BatteryPower") | .value // empty')
+SOC=$(echo "$LATEST_RESPONSE" | jq -r '.deviceDataList[0].dataList[] | select(.key=="SOC") | .value // empty')
 
-echo "Raw value: $STATE"
+TOTAL_INVERTER_OUTPUT_POWER=${TOTAL_INVERTER_OUTPUT_POWER:-0}
+TOTAL_CONSUMPTION_POWER=${TOTAL_CONSUMPTION_POWER:-0}
+BATTERY_POWER=${BATTERY_POWER:-0}
+SOC=${SOC:-0}
 
-if [[ "$STATE" == "0001" ]]; then
+if [[ -z "$DEVICE_STATE" ]]; then
+  echo "Device state is empty"
+  echo "$LATEST_RESPONSE"
+  exit 1
+fi
+
+echo "deviceState: $DEVICE_STATE"
+echo "collectionTime: $COLLECTION_TIME"
+echo "TotalInverterOutputPower: $TOTAL_INVERTER_OUTPUT_POWER W"
+echo "TotalConsumptionPower: $TOTAL_CONSUMPTION_POWER W"
+echo "BatteryPower: $BATTERY_POWER W"
+echo "SOC: $SOC %"
+
+if [[ "$DEVICE_STATE" != "1" ]]; then
+  echo "INVERTER: OFFLINE_OR_UNAVAILABLE"
+elif jq -e '(
+    (.deviceDataList[0].dataList[] | select(.key=="TotalInverterOutputPower") | (.value|tonumber)) > 0
+  ) or (
+    (.deviceDataList[0].dataList[] | select(.key=="TotalConsumptionPower") | (.value|tonumber)) > 0
+  ) or (
+    (.deviceDataList[0].dataList[] | select(.key=="BatteryPower") | (.value|tonumber)) != 0
+  )' >/dev/null 2>&1 <<<"$LATEST_RESPONSE"; then
   echo "INVERTER: RUN"
-elif [[ "$STATE" == "0000" ]]; then
-  echo "INVERTER: STOP"
 else
-  echo "INVERTER: UNKNOWN ($STATE)"
+  echo "INVERTER: STOP_OR_IDLE"
 fi

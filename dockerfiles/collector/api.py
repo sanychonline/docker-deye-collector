@@ -44,6 +44,30 @@ def get_metrics():
 def require_auth():
     return session.get("auth") is True
 
+
+def run_script(script_path):
+    result = subprocess.run(
+        ["/bin/bash", script_path],
+        capture_output=True,
+        text=True,
+        cwd="/opt/deye",
+        env=os.environ.copy(),
+    )
+
+    output_parts = []
+    stdout = (result.stdout or "").strip()
+    stderr = (result.stderr or "").strip()
+
+    if stdout:
+        output_parts.append(stdout)
+    if stderr and stderr != stdout:
+        output_parts.append(stderr)
+
+    if result.returncode != 0:
+        output_parts.append(f"[exit code: {result.returncode}]")
+
+    return "\n".join(output_parts) if output_parts else f"[exit code: {result.returncode}]"
+
 LOGIN_HTML = """
 <!doctype html>
 <html>
@@ -267,12 +291,7 @@ def index():
     if request.method == "POST":
         action = request.form.get("action")
         if action in SCRIPTS:
-            result = subprocess.run(
-                [SCRIPTS[action]],
-                capture_output=True,
-                text=True
-            )
-            output = result.stdout or result.stderr
+            output = run_script(SCRIPTS[action])
     return render_template_string(HTML, result=output)
 
 @app.route("/metrics")
