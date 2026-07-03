@@ -18,15 +18,15 @@ echo
 
 echo "== LIVE REGISTER READ 0x0050 =="
 
-READ_OK=true
-if ! read_register_state 1 0 >/dev/null; then
-  READ_OK=false
-  echo "READ register polling failed, falling back to cloud snapshot"
-else
-  echo "readOrderId: ${READ_ORDER_ID}"
-  echo "analysisResult: ${READ_ANALYSIS_RESULT}"
-  echo "registerState: ${READ_REGISTER_STATE}"
+if ! read_register_state 2 1 >/dev/null; then
+  echo "READ register polling failed"
+  echo "${READ_ORDER_RESPONSE:-}"
+  exit 1
 fi
+
+echo "readOrderId: ${READ_ORDER_ID}"
+echo "analysisResult: ${READ_ANALYSIS_RESULT}"
+echo "registerState: ${READ_REGISTER_STATE}"
 echo
 
 echo "== DEVICE LATEST STATUS =="
@@ -61,18 +61,10 @@ echo "TotalConsumptionPower: ${TOTAL_CONSUMPTION_POWER} W"
 echo "BatteryPower: ${BATTERY_POWER} W"
 echo "SOC: ${SOC} %"
 
-if [[ "$READ_OK" == "true" && "$READ_REGISTER_STATE" == "0001" ]]; then
+if [[ "$READ_REGISTER_STATE" == "0001" ]]; then
   echo "INVERTER: RUN"
-elif [[ "$READ_OK" == "true" && "$READ_REGISTER_STATE" == "0000" ]]; then
+elif [[ "$READ_REGISTER_STATE" == "0000" ]]; then
   echo "INVERTER: STOP_OR_IDLE"
-elif jq -e '(
-    (.deviceDataList[0].dataList[] | select(.key=="TotalInverterOutputPower") | (.value|tonumber)) > 0
-  ) or (
-    (.deviceDataList[0].dataList[] | select(.key=="TotalConsumptionPower") | (.value|tonumber)) > 0
-  )' >/dev/null 2>&1 <<<"$LATEST_RESPONSE"; then
-  echo "INVERTER: RUN (cloud fallback)"
-elif [[ "$DEVICE_STATE" == "1" || "$DEVICE_STATE" == "2" ]]; then
-  echo "INVERTER: STOP_OR_IDLE (cloud fallback)"
 else
-  echo "INVERTER: OFFLINE_OR_UNAVAILABLE"
+  echo "INVERTER: UNKNOWN_REGISTER_STATE"
 fi
